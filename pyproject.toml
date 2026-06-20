@@ -1,0 +1,10 @@
+[project]
+name = "portfolio-committee-mas"
+version = "0.1.0"
+description = "A risk-constrained multi-agent portfolio committee simulation"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
