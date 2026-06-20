@@ -11,7 +11,7 @@ python3 -m portfolio_mas.demo
 python3 -m unittest discover -s tests
 ```
 
-The demo starts with a balanced portfolio, encounters an inflation shock, proposes an energy tilt containing a restricted security, records a compliance veto, revises the proposal, re-runs risk and compliance, requests human approval, and writes an append-only JSONL audit trail to `runs/latest-audit.jsonl`.
+The demo starts with a balanced portfolio, encounters an inflation shock, proposes an energy tilt containing a restricted security, records a compliance veto, revises the proposal, re-runs risk and compliance, obtains approval bound to the revised proposal hash, and appends the complete interaction to `runs/latest-audit.jsonl`.
 
 ## System brief
 
@@ -45,7 +45,7 @@ MAS does not guarantee diversity: correlated models can still herd. The design t
 | Compliance | Check restricted list and policy version | Versioned mandate | Current run only | Hard veto; cannot propose return-seeking trades |
 | Portfolio manager | Synthesize and revise proposals | Messages on blackboard | Current run only | Revise; cannot override veto |
 | Supervisor | Route stages, enforce gates, log decisions | Blackboard/control state | Append-only audit | Approve workflow only after controls/HITL |
-| Human chair | Accept/reject material rebalance | Full decision packet | External record | Final accountability; cannot erase audit |
+| Human chair | Accept/reject material rebalance | Frozen proposal hash + decision packet | External record | Structured approval response only; cannot publish system decisions or erase audit |
 
 Production versions should isolate credentials and tools per agent. No language model should directly write to an execution venue.
 
@@ -92,7 +92,7 @@ Agents publish typed `Message` objects rather than unconstrained chat:
 }
 ```
 
-Allowed types are `observation`, `recommendation`, `challenge`, `veto`, `escalation`, and `decision`. The supervisor routes by explicit recipient and correlation ID. Critical vetoes route to PM and supervisor; unresolved controls or missing approval route to the human chair. In production, schemas should be versioned, authenticated, size-limited, idempotent, and validated at ingress.
+Allowed types are `observation`, `recommendation`, `challenge`, `veto`, `escalation`, `approval`, and `decision`. The blackboard rejects unknown identities, unauthorized sender/type combinations, missing correlation IDs, empty recipients, invalid timestamps, duplicate message IDs, and malformed payloads. Valid messages are copied only to their declared recipient inboxes. Critical vetoes route to PM and supervisor; unresolved controls or missing, stale, replayed, rejected, or hash-mismatched approval blocks the run. A production schema should additionally be versioned, authenticated, size-limited, and idempotent across processes.
 
 ## Incentives
 
@@ -123,10 +123,10 @@ Controls include typed messages, immutable correlation-scoped logs, deterministi
 
 ## Safety, governance, and rollback
 
-- **Human in the loop:** material turnover requires explicit approval. Lack of approval is rejection, not timeout-based consent.
+- **Human in the loop:** material turnover requires an identified, timestamped response bound to the SHA-256 hash of the exact controlled proposal. Approval expires after 15 minutes and cannot be replayed within a supervisor session. Lack of valid approval is rejection, not timeout-based consent.
 - **Fail closed:** missing compliance/risk responses, invalid schema, stale inputs, or unresolved breach should block execution.
 - **Rollback:** the initial portfolio is an immutable checkpoint; blocked runs return it unchanged. Real execution would require a separate authorized adapter and compensating-trade playbook.
-- **Auditability:** every message includes identity, timestamp, correlation ID, severity, evidence, and rule version where applicable; JSONL preserves sequence.
+- **Auditability:** every message includes identity, timestamp, correlation ID, severity, evidence, and rule version where applicable. JSONL is opened in append mode and persists across runs rather than being truncated at startup.
 - **Abuse controls:** authenticate agents, authorize tools independently, sanitize evidence, cap messages/rounds, restrict external URLs, and never expose brokerage credentials to reasoning agents.
 - **Governance:** version mandates and prompts, require dual control for policy changes, retain decisions per policy, and periodically test restricted-list freshness.
 
@@ -149,7 +149,7 @@ Deployment uses shadow mode first, then recommendation-only mode. Prompt, model,
 
 Evaluation uses a fixed scenario suite: normal markets, inflation shock, missing data, stale restricted list, concentration breach, contradictory evidence, prompt injection in research, unavailable agent, duplicated message, and approval replay. Compare against (1) a single-agent baseline, (2) deterministic rules only, and (3) human-only committee workflow. Red-team tests attempt veto bypass, evidence spoofing, recipient impersonation, and message floods.
 
-The included tests establish three prototype invariants: restricted assets never reach the final portfolio, absent human approval rolls back, and approved weights remain balanced. They are illustrative, not sufficient assurance.
+The included tests establish ten prototype invariants spanning restricted-asset removal, risk-breach blocking, rollback without approval, proposal-hash binding, approval freshness and replay prevention, balanced weights, sender/type authorization, recipient routing, malformed-message rejection, and audit persistence. They are illustrative, not sufficient assurance.
 
 ## Interoperability boundaries
 
@@ -165,9 +165,9 @@ MARL could be used offline in a synthetic market to research capital-budget nego
 
 ## Prototype limitations and next steps
 
-All market data, forecasts, and trades are mocked; the agents are deterministic Python classes, not LLM calls. The audit file is append-only by convention, not cryptographically immutable. There is no authentication, concurrent runner, durable queue, live execution, or production UI.
+All market data, forecasts, and trades are mocked; the agents are deterministic Python classes, not LLM calls. The audit file is durably appended but is not signed, hash-chained, or protected from filesystem administrators. Approval replay detection is process-local. There is no external identity provider, concurrent runner, durable queue, live execution, or production UI.
 
-Next steps: add JSON Schema validation, frozen input/proposal hashes, injected data/tool interfaces, timeout and idempotency handling, richer stress tests, an approval UI, signed audit storage, and optional LLM adapters behind the same agent contracts. Only after shadow evaluation should a separately permissioned execution service be considered.
+Next steps: add a versioned external JSON Schema, frozen input-data hashes, injected data/tool interfaces, cross-process idempotency, richer stress tests, an approval UI backed by strong identity, signed/hash-chained audit storage, and optional LLM adapters behind the same agent contracts. Only after shadow evaluation should a separately permissioned execution service be considered.
 
 ## Repository map
 

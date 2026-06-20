@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from hashlib import sha256
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +15,7 @@ class MessageType(str, Enum):
     CHALLENGE = "challenge"
     VETO = "veto"
     ESCALATION = "escalation"
+    APPROVAL = "approval"
     DECISION = "decision"
 
 
@@ -72,6 +75,15 @@ class Portfolio:
             totals[sector] = round(totals.get(sector, 0) + weight, 6)
         return totals
 
+    def proposal_hash(self) -> str:
+        """Return a stable digest that binds approval to exact portfolio contents."""
+        canonical = json.dumps(
+            {"weights": self.weights, "sectors": self.sectors},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return sha256(canonical.encode()).hexdigest()
+
 
 @dataclass(frozen=True)
 class Mandate:
@@ -80,3 +92,15 @@ class Mandate:
     min_cash_weight: float = 0.05
     restricted_assets: tuple[str, ...] = ("SANCTIONED_OIL",)
     human_approval_threshold: float = 0.10
+
+
+@dataclass(frozen=True)
+class HumanApproval:
+    approver: str
+    proposal_hash: str
+    approved: bool
+    rationale: str
+    id: str = field(default_factory=lambda: str(uuid4()))
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )

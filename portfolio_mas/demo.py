@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .models import Mandate, Portfolio
+from .models import HumanApproval, Mandate, Portfolio
 from .supervisor import CommitteeSupervisor
 
 
@@ -10,7 +10,15 @@ def main() -> None:
         sectors={"TECH_ETF": "Technology", "BOND_ETF": "Fixed Income", "ENERGY_ETF": "Energy", "HEALTH_ETF": "Healthcare", "CASH": "Cash"},
     )
     audit = Path("runs/latest-audit.jsonl")
-    result = CommitteeSupervisor(audit).run(initial, Mandate(), human_approved=True)
+    def chair_approval(proposal_hash: str) -> HumanApproval:
+        return HumanApproval(
+            approver="committee-chair@example.com",
+            proposal_hash=proposal_hash,
+            approved=True,
+            rationale="Controls cleared; rebalance is within the approved risk budget.",
+        )
+
+    result = CommitteeSupervisor(audit).run(initial, Mandate(), chair_approval)
     print(f"Status: {result.status}")
     print(f"Initial: {result.initial.weights}")
     print(f"Unsafe proposal: {result.proposed.weights}")
@@ -20,4 +28,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
